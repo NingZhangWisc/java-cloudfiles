@@ -30,7 +30,6 @@ import org.apache.commons.codec.EncoderException;
 import org.apache.commons.codec.net.URLCodec;
 import org.apache.commons.lang.text.StrTokenizer;
 import org.apache.http.Header;
-import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpException;
