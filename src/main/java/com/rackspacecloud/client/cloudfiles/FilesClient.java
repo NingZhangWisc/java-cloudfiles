@@ -30,6 +30,8 @@ import org.apache.commons.codec.EncoderException;
 import org.apache.commons.codec.net.URLCodec;
 import org.apache.commons.lang.text.StrTokenizer;
 import org.apache.http.Header;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpException;
 import org.apache.http.HttpResponse;
@@ -117,6 +119,7 @@ public class FilesClient
     private String password = null;
     private String account = null;
     private String authenticationURL;
+    private String authVersion;
     private int connectionTimeOut;
     private String storageURL = null;
     private String cdnManagementURL = null;
@@ -135,13 +138,18 @@ public class FilesClient
      * @param username  The username to log in to 
      * @param password  The password
      * @param account   The Cloud Files account to use
+     * @param authVersion The version of authentication
      * @param connectionTimeOut  The connection timeout, in ms.
      */
-   public FilesClient(HttpClient client, String username, String password, String authUrl, String account, int connectionTimeOut) {
+    public FilesClient(
+        HttpClient client, String username, String password, String authUrl, String account, String authVersion,
+        int connectionTimeOut
+    ) {
         this.client = client;
         this.username = username;
         this.password = password;
         this.account = account;
+        this.authVersion = authVersion;
         if(authUrl == null) {
             authUrl = FilesUtil.getProperty("auth_url");
         }
@@ -168,27 +176,27 @@ public class FilesClient
      * @param account   The Cloud Files account to use
      * @param connectionTimeOut  The connection timeout, in ms.
      */
-    public FilesClient(String username, String password, String authUrl, String account, final int connectionTimeOut)
-    {
-    	   this(new DefaultHttpClient() {
-    	        protected HttpParams createHttpParams() {
-    	            BasicHttpParams params = new BasicHttpParams();
-    	            org.apache.http.params.HttpConnectionParams.setSoTimeout(params, connectionTimeOut);
-    	            params.setParameter("http.socket.timeout", connectionTimeOut);
-    	            return params;
-    	        }
+    public FilesClient(
+        String username, String password, String authUrl, String account, String authVersion, final int connectionTimeOut
+    ) {
+        this(new DefaultHttpClient() {
+    	    protected HttpParams createHttpParams() {
+    	        BasicHttpParams params = new BasicHttpParams();
+    	        org.apache.http.params.HttpConnectionParams.setSoTimeout(params, connectionTimeOut);
+    	        params.setParameter("http.socket.timeout", connectionTimeOut);
+    	        return params;
+    	    }
 
-    	        @Override
-                protected ClientConnectionManager createClientConnectionManager() {
-       	            SchemeRegistry schemeRegistry = new SchemeRegistry();
-       	            schemeRegistry.register(
-       	                    new Scheme("http", 80, PlainSocketFactory.getSocketFactory()));
-       	            schemeRegistry.register(
-       	                    new Scheme("https", 443, SSLSocketFactory.getSocketFactory()));
-       	            return new ThreadSafeClientConnManager(createHttpParams(), schemeRegistry);
-       	        }
-    	    }, username, password, authUrl, account, connectionTimeOut);
-
+    	    @Override
+            protected ClientConnectionManager createClientConnectionManager() {
+       	        SchemeRegistry schemeRegistry = new SchemeRegistry();
+       	        schemeRegistry.register(
+       	            new Scheme("http", 80, PlainSocketFactory.getSocketFactory()));
+       	        schemeRegistry.register(
+       	            new Scheme("https", 443, SSLSocketFactory.getSocketFactory()));
+       	        return new ThreadSafeClientConnManager(createHttpParams(), schemeRegistry);
+       	    }
+    	}, username, password, authUrl, account, authVersion, connectionTimeOut);
      }
 
     /**
@@ -198,21 +206,21 @@ public class FilesClient
      * @param username
      * @param password
      * @param authUrl
+     * @param authVersion
      */
-    public FilesClient(String username, String password, String authUrl)
+    public FilesClient(String username, String password, String authUrl, String authVersion="v1.0")
     {
-        this (username, password, authUrl, null, FilesUtil.getIntProperty("connection_timeout"));
+        this (username, password, authUrl, null, authVersion, FilesUtil.getIntProperty("connection_timeout"));
     }
-
     /**
      * Mosso-style authentication (No accounts).
      * 
      * @param username     Your CloudFiles username
      * @param apiAccessKey Your CloudFiles API Access Key
      */
-    public FilesClient(String username, String apiAccessKey)
+    public FilesClient(String username, String apiAccessKey, String authVersion="v1.0")
     {
-        this (username, apiAccessKey, null, null, FilesUtil.getIntProperty("connection_timeout"));
+        this (username, apiAccessKey, null, null, authVersion, FilesUtil.getIntProperty("connection_timeout"));
     	//lConnectionManagerogger.warn("LGV");
         //logger.debug("LGV:" + client.getHttpConnectionManager()); 
     }
@@ -222,13 +230,15 @@ public class FilesClient
      * and account from FilesUtil
      * 
      */
-    public FilesClient()
-    {
-        this (FilesUtil.getProperty("username"), 
-        	  FilesUtil.getProperty("password"),
-        	  null,
-        	  FilesUtil.getProperty("account"), 
-        	  FilesUtil.getIntProperty("connection_timeout"));
+    public FilesClient(String authVersion="v1.0") {
+        this (
+            FilesUtil.getProperty("username"), 
+            FilesUtil.getProperty("password"),
+            null,
+            authVersion,
+            FilesUtil.getProperty("account"), 
+            FilesUtil.getIntProperty("connection_timeout")
+        );
     }
 
     /**
@@ -265,25 +275,36 @@ public class FilesClient
      * @throws IOException   There was an IO error doing network communication
      * @throws HttpException There was an error with the http protocol
      */
-    public boolean login() throws IOException, HttpException
-    {
+    public boolean login() throws IOException, HttpException {
+        if (authVersion.equals("v1.0")) {
+            return _login_v1();
+        } else {
+            return _login_v2();
+        }    
+    }
+    
+    /**
+     * Loging for v1.0
+     */
+    private boolean _login_v1() throws IOException, HttpException {
         HttpGet method = new HttpGet(authenticationURL);
         method.getParams().setIntParameter("http.socket.timeout", connectionTimeOut);
-
-        method.setHeader(FilesUtil.getProperty("auth_user_header", FilesConstants.X_STORAGE_USER_DEFAULT), 
-        		username);
-        method.setHeader(FilesUtil.getProperty("auth_pass_header", FilesConstants.X_STORAGE_PASS_DEFAULT), 
-        		password);
+        method.setHeader(
+            FilesUtil.getProperty("auth_user_header", FilesConstants.X_STORAGE_USER_DEFAULT), 
+            username
+        );
+        method.setHeader(
+            FilesUtil.getProperty("auth_pass_header", FilesConstants.X_STORAGE_PASS_DEFAULT), 
+            password
+        );
 
         FilesResponse response = new FilesResponse(client.execute(method));
         
-        if (response.loginSuccess())
-        {
-            isLoggedin   = true;
-            if(usingSnet() || envSnet()){
+        if (response.loginSuccess()) {
+            isLoggedin = true;
+            if(usingSnet() || envSnet()) {
             	storageURL = snetAddr + response.getStorageURL().substring(8);
-            }
-            else{
+            } else {
             	storageURL = response.getStorageURL();
             }
             cdnManagementURL = response.getCDNManagementURL();
@@ -298,11 +319,47 @@ public class FilesClient
         return this.isLoggedin;
     }
     
+    /**
+     * Loging for v2.0
+     */
+    private boolean _login_v2() throws IOException, HttpException {  
+        HttpPost method = new HttpPost(authenticationURL);
+        method.getParams().setIntParameter("http.socket.timeout", connectionTimeOut);
+        
+        String tempArr = username.split(':');
+        userName = tempArr[0];
+        tenantName = tempArr[1];
 
+        String authStr = "{\"auth\":{\"passwordCredentials\":{\"username\": " + userName + 
+            ", \"password\": " + password + "}, \"tenantName\": " + tenantName + "}}";
+        StringEntity entity = new StringEntity(authStr, ContentType.APPLICATION_JSON);
+        method.setEntity(entity);
+
+        FilesResponse response = new FilesResponse(client.execute(method));
+        
+        if (response.loginSuccess()) {
+            isLoggedin = true;
+            if(usingSnet() || envSnet()) {
+            	storageURL = snetAddr + response.getStorageURL().substring(8);
+            } else {
+            	storageURL = response.getStorageURL();
+            }
+            cdnManagementURL = response.getCDNManagementURL();
+            authToken = response.getAuthToken();
+            logger.debug("storageURL: " + storageURL);
+            logger.debug("authToken: " + authToken);
+            logger.debug("cdnManagementURL:" + cdnManagementURL);
+            logger.debug("ConnectionManager:" + client.getConnectionManager());
+        }
+        method.abort();
+
+        return this.isLoggedin;
+    }
+    
     /**
      * Log in to CloudFiles.  This method performs the authentication and sets up the client's internal state.
      * 
-      * @throws IOException   There was an IO error doing network communication
+     * @throws IOException   There was an IO error doing network communication
      * @throws HttpException There was an error with the http protocol
      */
     public boolean login(String authToken, String storageURL, String cdnManagmentUrl) throws IOException, HttpException
