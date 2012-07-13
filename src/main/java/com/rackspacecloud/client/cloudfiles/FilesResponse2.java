@@ -10,6 +10,8 @@ import org.apache.http.StatusLine;
 import org.apache.http.util.EntityUtils;
 import org.apache.http.HttpEntity;
 import org.apache.log4j.Logger;
+import org.json.JSONObject;
+import org.json.JSONException;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,25 +20,66 @@ public class FilesResponse2
 {
     private HttpResponse response = null;
     private HttpEntity entity = null;
-
+    private String storageURL = null;
+    private String token = null;
     private static Logger logger = Logger.getLogger(FilesResponse.class);
 
     /**
      * @param method The HttpMethod that generated this response
      */
-    public FilesResponse (HttpResponse response)
-    {
+    public FilesResponse2(HttpResponse response) throws JSONException {
     	this.response = response;
     	entity = response.getEntity();
-        
-    	if (logger.isDebugEnabled())
-        {
-     		logger.debug ("Status Line: " + getStatusLine());
+	resolveAuthInfo(getContent()); 
 
-    		Header [] responseHeaders = getResponseHeaders();    
-    		for (int i=0; i < responseHeaders.length;i++)
-    			logger.debug(responseHeaders[i]);
+    	if (logger.isDebugEnabled()) {
+     	    logger.debug ("Status Line: " + getStatusLine());
+
+    	    Header [] responseHeaders = getResponseHeaders();    
+    	    for (int i=0; i < responseHeaders.length;i++)
+    		logger.debug(responseHeaders[i]);
         }
+    }
+
+    /**
+     * Get the content of HTTP Body.
+     * @return String the content
+     */
+    public String getContent() {
+    	InputStream in = entity.getContent();
+	InputStreamReader reader = new InputStreamReader(in);
+	BufferedReader bfReader = new BufferedReader(reader);
+	String s, content;
+	StringBuilder contentBuilder = new StringBuilder();
+	while ((s = bfReader.readLine()) != null) {
+	    contentBuilder.append(s);
+	}
+        content = contentBuilder.toString();
+
+	return content;
+    }
+
+    /**
+     * To resolve the json of authentication info.
+     * @param String json str
+     * @return None
+     */
+    private void resolveAuthInfo(String info) throws JSONException {
+    	JSONObject response = new JSONObject(json);
+	JSONObject access = response.getJSONObject("access");
+		        
+	JSONArray serviceCatalog = access.getJSONArray("serviceCatalog");
+	for(int i = 0; i < serviceCatalog.length(); ++i) {
+	    JSONObject service = serviceCatalog.getJSONObject(i);
+	    if (service.getString("type").equals("object-store")) {
+	        JSONArray endpoints = service.getJSONArray("endpoints");
+		if (endpoints.length() > 0) {
+		    storageURL = endpoints.getJSONObject(0).getString("publicURL");
+		    token = access.getJSONObject("token").getString("id");
+		    break;
+		}
+	    }
+    	}
     }
 
     /**
@@ -60,9 +103,8 @@ public class FilesResponse2
      *
      * @return null if the user is not logged into Cloud FS or the Storage token
      */
-    public String getAuthToken ()
-    {
-        return getResponseHeader(FilesUtil.getProperty("auth_token_name", FilesConstants.X_AUTH_TOKEN)).getValue();
+    public String getAuthToken () {
+        return token;
     }
 
     /**
@@ -71,9 +113,8 @@ public class FilesResponse2
      *
      * @return null if the user is not logged into Cloud FS or the Storage URL
      */
-    public String getStorageURL ()
-    {
-       return getResponseHeader(FilesConstants.X_STORAGE_URL).getValue();
+    public String getStorageURL () {
+        return storageURL; 
     }
 
     /**

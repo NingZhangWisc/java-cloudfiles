@@ -62,6 +62,8 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
+import org.json.JSONObject;
+import org.json.JSONException;
 
 import com.rackspacecloud.client.cloudfiles.wrapper.RequestEntityWrapper;
 
@@ -207,21 +209,21 @@ public class FilesClient
      * @param authUrl
      * @param authVersion
      */
-    public FilesClient(String username, String password, String authUrl, String authVersion="v1.0")
+    public FilesClient(String username, String password, String authUrl, String authVersion)
     {
         this (username, password, authUrl, null, authVersion, FilesUtil.getIntProperty("connection_timeout"));
     }
+
     /**
      * Mosso-style authentication (No accounts).
      * 
      * @param username     Your CloudFiles username
      * @param apiAccessKey Your CloudFiles API Access Key
+     * @param authVersion  The version of Keystone.
      */
-    public FilesClient(String username, String apiAccessKey, String authVersion="v1.0")
+    public FilesClient(String username, String apiAccessKey, String authVersion)
     {
         this (username, apiAccessKey, null, null, authVersion, FilesUtil.getIntProperty("connection_timeout"));
-    	//lConnectionManagerogger.warn("LGV");
-        //logger.debug("LGV:" + client.getHttpConnectionManager()); 
     }
 
     /**
@@ -229,7 +231,7 @@ public class FilesClient
      * and account from FilesUtil
      * 
      */
-    public FilesClient(String authVersion="v1.0") {
+    public FilesClient(String authVersion) {
         this (
             FilesUtil.getProperty("username"), 
             FilesUtil.getProperty("password"),
@@ -274,7 +276,7 @@ public class FilesClient
      * @throws IOException   There was an IO error doing network communication
      * @throws HttpException There was an error with the http protocol
      */
-    public boolean login() throws IOException, HttpException {
+    public boolean login() throws IOException, HttpException, JSONException {
         if (authVersion.equals("v1.0")) {
             return _login_v1();
         } else {
@@ -321,20 +323,32 @@ public class FilesClient
     /**
      * Loging for v2.0
      */
-    private boolean _login_v2() throws IOException, HttpException {  
+    private boolean _login_v2()
+        throws IOException, HttpException, JSONException {  
+        
         HttpPost method = new HttpPost(authenticationURL);
         method.getParams().setIntParameter("http.socket.timeout", connectionTimeOut);
         
-        String tempArr = username.split(':');
+        String[] tempArr = username.split(":");
+        String userName, tenantName;
         userName = tempArr[0];
         tenantName = tempArr[1];
 
-        String authStr = "{\"auth\":{\"passwordCredentials\":{\"username\": " + userName + 
-            ", \"password\": " + password + "}, \"tenantName\": " + tenantName + "}}";
-        StringEntity entity = new StringEntity(authStr, ContentType.APPLICATION_JSON);
+        // To construct json string.
+        JSONObject passwordCredentials = new JSONObject();
+        passwordCredentials.put("username", userName);
+        passwordCredentials.put("password", password);
+        JSONObject auth = new JSONObject();
+        auth.put("passwordCredentials", passwordCredentials);
+        auth.put("tenantName", tenantName);
+        JSONObject obj = new JSONObject();
+        obj.put("auth", auth);
+
+        StringEntity entity = new StringEntity(obj.toString());
+        entity.setContentType("application/json");
         method.setEntity(entity);
 
-        FilesResponse response = new FilesResponse(client.execute(method));
+        FilesResponse response = new FilesResponse2(client.execute(method));
         
         if (response.loginSuccess()) {
             isLoggedin = true;
@@ -415,7 +429,7 @@ public class FilesClient
      * @throws FilesException There was another error in the request to the server.
      * @throws FilesAuthorizationException The client's login was invalid.
      */
-    public List<FilesContainerInfo> listContainersInfo(int limit, String marker) throws IOException, HttpException, FilesAuthorizationException, FilesException
+    public List<FilesContainerInfo> listContainersInfo(int limit, String marker) throws IOException, HttpException, FilesAuthorizationException, FilesException, JSONException
     {
     	if (!this.isLoggedin()) {
     		throw new FilesAuthorizationException("You must be logged in", null, null);
@@ -557,7 +571,8 @@ public class FilesClient
      * @throws FilesException There was another error in the request to the server.
      * @throws FilesAuthorizationException The client's login was invalid.
      */
-    public List<FilesContainer> listContainers(int limit, String marker) throws IOException, HttpException, FilesException
+    public List<FilesContainer> listContainers(int limit, String marker) 
+        throws IOException, HttpException, FilesException, JSONException
     {
     	if (!this.isLoggedin()) {
        		throw new FilesAuthorizationException("You must be logged in", null, null);
@@ -660,7 +675,7 @@ public class FilesClient
          * @throws FilesException There was another error in the request to the server.
          * @throws FilesAuthorizationException The client's login was invalid.
          */
-        public List<FilesObject> listObjectsStartingWith (String container, String startsWith, String path, int limit, String marker, Character delimiter) throws IOException, FilesException
+        public List<FilesObject> listObjectsStartingWith (String container, String startsWith, String path, int limit, String marker, Character delimiter) throws IOException, FilesException, JSONException
         {
     	if (!this.isLoggedin()) {
        		throw new FilesAuthorizationException("You must be logged in", null, null);
@@ -952,7 +967,7 @@ public class FilesClient
      * @throws FilesException There was another error in the request to the server.
      * @throws FilesAuthorizationException The client's login was invalid.
      */
-   public FilesAccountInfo getAccountInfo() throws IOException, HttpException, FilesAuthorizationException, FilesException
+   public FilesAccountInfo getAccountInfo() throws IOException, HttpException, FilesAuthorizationException, FilesException, JSONException
    {
     	if (this.isLoggedin()) {
     		HttpHead method = null;
@@ -1005,7 +1020,7 @@ public class FilesClient
      * @throws FilesNotFoundException The container was not found
      * @throws FilesAuthorizationException The client was not logged in or the log in expired.
      */
-    public FilesContainerInfo getContainerInfo (String container) throws IOException, HttpException, FilesException
+    public FilesContainerInfo getContainerInfo (String container) throws IOException, HttpException, FilesException, JSONException
     {
     	if (this.isLoggedin())
     	{
@@ -1069,7 +1084,7 @@ public class FilesClient
      * @throws FilesAuthorizationException The client was not property logged in
      * @throws FilesInvalidNameException The container name was invalid
      */
-    public void createContainer(String name) throws IOException, HttpException, FilesAuthorizationException, FilesException
+    public void createContainer(String name) throws IOException, HttpException, FilesAuthorizationException, FilesException, JSONException
     {
     	if (this.isLoggedin())
     	{
@@ -1132,7 +1147,7 @@ public class FilesClient
      * @throws FilesNotFoundException      The container doesn't exist
      * @throws FilesContainerNotEmptyException The container was not empty
      */
-    public boolean deleteContainer(String name) throws IOException, HttpException, FilesAuthorizationException, FilesInvalidNameException, FilesNotFoundException, FilesContainerNotEmptyException
+    public boolean deleteContainer(String name) throws IOException, HttpException, FilesAuthorizationException, FilesInvalidNameException, FilesNotFoundException, FilesContainerNotEmptyException, JSONException
     {
     	if (this.isLoggedin())
     	{
@@ -1198,7 +1213,7 @@ public class FilesClient
      * @throws HttpException There was an error with the http protocol
      * @throws FilesException There was an error talking to the CDN Server.
      */
-    public String cdnEnableContainer(String name) throws IOException, HttpException, FilesException
+    public String cdnEnableContainer(String name) throws IOException, HttpException, FilesException, JSONException
     {
     	String returnValue = null;
     	if (this.isLoggedin())
@@ -1276,7 +1291,7 @@ public class FilesClient
      * @param userAgentACL Unused for now
      */
     private String cdnUpdateContainer(String name, int ttl, boolean enabled, String referrerAcl, String userAgentACL, boolean retainLogs) 
-    throws IOException, HttpException, FilesException
+    throws IOException, HttpException, FilesException, JSONException
     {
     	String returnValue = null;
     	if (this.isLoggedin())
@@ -1368,7 +1383,7 @@ public class FilesClient
      * @throws FilesException There was an error talking to the CloudFiles Server
      * @throws FilesNotFoundException The Container has never been CDN enabled
      */
-    public FilesCDNContainer getCDNContainerInfo(String container) throws IOException, FilesNotFoundException, HttpException, FilesException
+    public FilesCDNContainer getCDNContainerInfo(String container) throws IOException, FilesNotFoundException, HttpException, FilesException, JSONException
     {
     	if (isLoggedin()) {
     		if (isValidContainerName(container))
@@ -1457,7 +1472,7 @@ public class FilesClient
      * @throws FilesException There was an error talking to the CloudFiles Server
      * @throws FilesNotFoundException The Container has never been CDN enabled
      */
-    public boolean isCDNEnabled(String container) throws IOException, HttpException, FilesException
+    public boolean isCDNEnabled(String container) throws IOException, HttpException, FilesException, JSONException
     {
     	if (isLoggedin()) {
     		if (isValidContainerName(container))
@@ -1606,7 +1621,7 @@ public class FilesClient
      * @throws HttpException There was an error with the http protocol
      * @throws FilesException 
      */
-    public List<String> listCdnContainers(int limit, String marker) throws IOException, HttpException, FilesException
+    public List<String> listCdnContainers(int limit, String marker) throws IOException, HttpException, FilesException, JSONException
     {
     	if (this.isLoggedin())
     	{
@@ -1678,7 +1693,7 @@ public class FilesClient
      * @throws FilesAuthorizationException Log in was not successful, or account is suspended 
      * @throws FilesException Other error
      */
-    public void purgeCDNContainer(String container, String emailAddresses) throws IOException, HttpException, FilesAuthorizationException, FilesException {
+    public void purgeCDNContainer(String container, String emailAddresses) throws IOException, HttpException, FilesAuthorizationException, FilesException, JSONException {
     	if (! isLoggedin) {
     		throw new FilesAuthorizationException("You must be logged in", null, null);
     	}
@@ -1742,7 +1757,7 @@ public class FilesClient
      * @throws FilesAuthorizationException Log in was not successful, or account is suspended 
      * @throws FilesException Other error
      */
-    public void purgeCDNObject(String container, String object, String emailAddresses) throws IOException, HttpException, FilesAuthorizationException, FilesException {
+    public void purgeCDNObject(String container, String object, String emailAddresses) throws IOException, HttpException, FilesAuthorizationException, FilesException, JSONException {
     	if (! isLoggedin) {
     		throw new FilesAuthorizationException("You must be logged in", null, null);
     	}
@@ -1833,7 +1848,7 @@ public class FilesClient
      * @throws HttpException There was an error with the http protocol
      * @throws FilesException 
      */
-    public List<FilesCDNContainer> listCdnContainerInfo(int limit, String marker) throws IOException, HttpException, FilesException
+    public List<FilesCDNContainer> listCdnContainerInfo(int limit, String marker) throws IOException, HttpException, FilesException, JSONException
     {
     	if (this.isLoggedin())
     	{
@@ -1998,7 +2013,7 @@ public class FilesClient
      * @throws HttpException There was an error with the http protocol
      * @throws FilesException 
      */
-    public boolean createManifestObject(String container, String contentType, String name, String manifest, Map<String,String> metadata, IFilesTransferCallback callback) throws IOException, HttpException, FilesException
+    public boolean createManifestObject(String container, String contentType, String name, String manifest, Map<String,String> metadata, IFilesTransferCallback callback) throws IOException, HttpException, FilesException, JSONException
     {
     	byte[] arr = new byte[0];
     	if (this.isLoggedin())
@@ -2147,7 +2162,7 @@ public class FilesClient
      * @throws HttpException There was an error with the http protocol
      * @throws FilesException 
      */
-    public String storeObjectAs (String container, File obj, String contentType, String name, Map<String,String> metadata, IFilesTransferCallback callback) throws IOException, HttpException, FilesException
+    public String storeObjectAs (String container, File obj, String contentType, String name, Map<String,String> metadata, IFilesTransferCallback callback) throws IOException, HttpException, FilesException, JSONException
     {
     	if (this.isLoggedin())
     	{
@@ -2279,7 +2294,7 @@ public class FilesClient
      * @throws HttpException There was an error with the http protocol
      * @throws FilesException 
      */
-    public boolean storeObject(String container, byte obj[], String contentType, String name, Map<String,String> metadata, IFilesTransferCallback callback) throws IOException, HttpException, FilesException
+    public boolean storeObject(String container, byte obj[], String contentType, String name, Map<String,String> metadata, IFilesTransferCallback callback) throws IOException, HttpException, FilesException, JSONException
     {
     	if (this.isLoggedin())
     	{
@@ -2443,7 +2458,7 @@ public class FilesClient
     * @throws HttpException There was a protocol level error talking to CloudFiles
     * @throws FilesException There was an error talking to CloudFiles.
     */
-public String storeObjectAs(String container, String name, HttpEntity entity, Map<String,String> metadata, String md5sum) throws IOException, HttpException, FilesException
+public String storeObjectAs(String container, String name, HttpEntity entity, Map<String,String> metadata, String md5sum) throws IOException, HttpException, FilesException, JSONException
     {
     	if (this.isLoggedin())
     	{
@@ -2524,7 +2539,7 @@ public String storeObjectAs(String container, String name, HttpEntity entity, Ma
                              String sourceObjName,
                              String destContainer,
                              String destObjName)
-        throws HttpException, IOException {
+        throws HttpException, IOException, JSONException {
         String etag = null;
         if (this.isLoggedin()) {
 
@@ -2607,7 +2622,7 @@ public String storeObjectAs(String container, String name, HttpEntity entity, Ma
      * @throws HttpException There was an error with the http protocol
      * @throws FilesException 
      */
-    public void deleteObject (String container, String objName) throws IOException, FilesNotFoundException, HttpException, FilesException
+    public void deleteObject (String container, String objName) throws IOException, FilesNotFoundException, HttpException, FilesException, JSONException
     {
     	if (this.isLoggedin())
     	{
@@ -2674,7 +2689,7 @@ public String storeObjectAs(String container, String name, HttpEntity entity, Ma
      * @throws FilesInvalidNameException The container or object name was not valid
      * @throws FilesNotFoundException The file was not found
      */
-    public FilesObjectMetaData getObjectMetaData (String container, String objName) throws IOException, FilesNotFoundException, HttpException, FilesAuthorizationException, FilesInvalidNameException
+    public FilesObjectMetaData getObjectMetaData (String container, String objName) throws IOException, FilesNotFoundException, HttpException, FilesAuthorizationException, FilesInvalidNameException, JSONException
     {
     	FilesObjectMetaData metaData;
     	if (this.isLoggedin())
@@ -2819,7 +2834,7 @@ public String storeObjectAs(String container, String name, HttpEntity entity, Ma
      * @throws FilesNotFoundException The container does not exist
      * @throws FilesInvalidNameException 
      */
-    public InputStream getObjectAsStream (String container, String objName) throws IOException, HttpException, FilesAuthorizationException, FilesInvalidNameException, FilesNotFoundException
+    public InputStream getObjectAsStream (String container, String objName) throws IOException, HttpException, FilesAuthorizationException, FilesInvalidNameException, FilesNotFoundException, JSONException
     {
     	if (this.isLoggedin())
     	{
@@ -2875,7 +2890,7 @@ public String storeObjectAs(String container, String name, HttpEntity entity, Ma
     	return null;
     }
 
-    public InputStream getObjectAsRangedStream (String container, String objName, long offset, long length) throws IOException, HttpException, FilesAuthorizationException, FilesInvalidNameException, FilesNotFoundException
+    public InputStream getObjectAsRangedStream (String container, String objName, long offset, long length) throws IOException, HttpException, FilesAuthorizationException, FilesInvalidNameException, FilesNotFoundException, JSONException
     {
     	if (this.isLoggedin())
     	{
@@ -3274,7 +3289,7 @@ public String storeObjectAs(String container, String name, HttpEntity entity, Ma
      */
 		public boolean updateObjectMetadataAndManifest(String container, String object, 
 			Map<String,String> metadata, String manifest) throws FilesAuthorizationException, 
-			HttpException, IOException, FilesInvalidNameException {
+			HttpException, IOException, FilesInvalidNameException, JSONException {
 			FilesResponse response;
 			
 	    	if (!isLoggedin) {
