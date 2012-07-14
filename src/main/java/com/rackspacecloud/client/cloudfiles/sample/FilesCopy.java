@@ -243,7 +243,7 @@ public class FilesCopy
 
 	public static void getContainerObjects (File localFolder, String containerName) throws IOException, HttpException, FilesAuthorizationException, NoSuchAlgorithmException, FilesException
 	{
-		FilesClient client = new FilesClient();
+		FilesClient client = new FilesClient("v2.0");
 		if ( client.login() )
 		{
 			if (client.containerExists(containerName))
@@ -277,7 +277,7 @@ public class FilesCopy
 	 */
 	private static void copyToCreateContainerIfNeeded (File file, String mimeType,String containerName) throws IOException, HttpException, NoSuchAlgorithmException, FilesException
 	{
-		FilesClient client = new FilesClient();
+		FilesClient client = new FilesClient("v2.0");
 		if ( client.login() )
 		{
 			if (client.containerExists(containerName))
@@ -308,7 +308,7 @@ public class FilesCopy
 	 */
 	private static void copyTo (File file, String mimeType,String containerName) throws IOException, HttpException, NoSuchAlgorithmException, FilesException
 	{
-		FilesClient client = new FilesClient();
+		FilesClient client = new FilesClient("v2.0");
 		if ( client.login() )
 		{
 			if (client.containerExists(containerName))

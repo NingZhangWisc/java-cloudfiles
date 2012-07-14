@@ -12,9 +12,12 @@ import org.apache.http.HttpEntity;
 import org.apache.log4j.Logger;
 import org.json.JSONObject;
 import org.json.JSONException;
+import org.json.JSONArray;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 
 public class FilesResponse2
 {
@@ -27,7 +30,7 @@ public class FilesResponse2
     /**
      * @param method The HttpMethod that generated this response
      */
-    public FilesResponse2(HttpResponse response) throws JSONException {
+    public FilesResponse2(HttpResponse response) {
     	this.response = response;
     	entity = response.getEntity();
 	resolveAuthInfo(getContent()); 
@@ -46,17 +49,22 @@ public class FilesResponse2
      * @return String the content
      */
     public String getContent() {
-    	InputStream in = entity.getContent();
-	InputStreamReader reader = new InputStreamReader(in);
-	BufferedReader bfReader = new BufferedReader(reader);
-	String s, content;
-	StringBuilder contentBuilder = new StringBuilder();
-	while ((s = bfReader.readLine()) != null) {
-	    contentBuilder.append(s);
+	try {
+    	    InputStream in = entity.getContent();
+	    InputStreamReader reader = new InputStreamReader(in);
+	    BufferedReader bfReader = new BufferedReader(reader);
+	    String s, content;
+	    StringBuilder contentBuilder = new StringBuilder();
+	    while ((s = bfReader.readLine()) != null) {
+	        contentBuilder.append(s);
+	    }
+            content = contentBuilder.toString();
+	    return content;
+	} catch (IOException ex) {
+	    logger.error("Error while reading form keystone.");
+	    System.exit(1);
 	}
-        content = contentBuilder.toString();
-
-	return content;
+	return "";
     }
 
     /**
@@ -64,22 +72,28 @@ public class FilesResponse2
      * @param String json str
      * @return None
      */
-    private void resolveAuthInfo(String info) throws JSONException {
-    	JSONObject response = new JSONObject(json);
-	JSONObject access = response.getJSONObject("access");
+    private void resolveAuthInfo(String info) {
+	try {
+            JSONObject response = new JSONObject(info);
+	    JSONObject access = response.getJSONObject("access");
 		        
-	JSONArray serviceCatalog = access.getJSONArray("serviceCatalog");
-	for(int i = 0; i < serviceCatalog.length(); ++i) {
-	    JSONObject service = serviceCatalog.getJSONObject(i);
-	    if (service.getString("type").equals("object-store")) {
-	        JSONArray endpoints = service.getJSONArray("endpoints");
-		if (endpoints.length() > 0) {
-		    storageURL = endpoints.getJSONObject(0).getString("publicURL");
-		    token = access.getJSONObject("token").getString("id");
-		    break;
-		}
-	    }
-    	}
+	    JSONArray serviceCatalog = access.getJSONArray("serviceCatalog");
+	    for(int i = 0; i < serviceCatalog.length(); ++i) {
+	        JSONObject service = serviceCatalog.getJSONObject(i);
+	        if (service.getString("type").equals("object-store")) {
+	            JSONArray endpoints = service.getJSONArray("endpoints");
+		    if (endpoints.length() > 0) {
+		        storageURL = endpoints.getJSONObject(0).getString("publicURL");
+		        token = access.getJSONObject("token").getString("id");
+		        break;
+		    }
+	        }
+    	    }
+	} catch (JSONException ex) {
+	    logger.error("Invalid content of authentication"); 
+            storageURL = null;
+	    token = null;
+	}
     }
 
     /**

@@ -57,7 +57,7 @@ public class FilesCli {
 	}
 	
 	private boolean doLogin(final String username, final String password) throws Exception {		
-		client = new FilesClient(username, password);
+		client = new FilesClient(username, password, "v2.0");
 		return client.login();		
 	}
 	

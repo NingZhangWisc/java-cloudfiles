@@ -12,7 +12,7 @@ public class FilesAuth
 	{
 		try
 		{
-			FilesClient client = new FilesClient();
+			FilesClient client = new FilesClient("v2.0");
 			boolean success = client.login();
 			if (success)
 			{
